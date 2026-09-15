@@ -1,9 +1,8 @@
 """
 =====================================================================================
-  🍄  FACTORY ENERGY & COST MANAGEMENT DASHBOARD (Multi-Month & Persistent JSON Config)
+  🍄  FACTORY ENERGY & COST MANAGEMENT DASHBOARD (Multi-Month & PM1/PM2/All Split)
   A world-class Streamlit + Plotly dashboard for an industrial mushroom cultivation
-  factory (cooling systems, autoclaves, packing lines).
-  Dark, monitoring-grade UI with auto-collapsed sidebar and persistent department/machine config.
+  factory with high-contrast UI, sharp tables, and selectable PM1/PM2 views.
 =====================================================================================
   Run with:  streamlit run app.py
 =====================================================================================
@@ -17,7 +16,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 # =====================================================================================
-# PAGE CONFIGURATION (Sidebar collapsed by default)
+# PAGE CONFIGURATION
 # =====================================================================================
 st.set_page_config(
     page_title="Factory Energy & Cost Dashboard",
@@ -44,22 +43,23 @@ DEFAULT_DEPARTMENTS = [
     "Warehouse PM2",
 ]
 
+# High Contrast Grafana-inspired Dark Palette (Sharp & Clear Text)
 BG_APP = "#0B0D10"
-BG_PANEL = "#181B1F"
-BG_PANEL_ALT = "#1F2328"
-BORDER = "#2C3235"
-TEXT_PRIMARY = "#E4E6EB"
-TEXT_MUTED = "#9AA1AC"
+BG_PANEL = "#16191D"
+BG_PANEL_ALT = "#1E2228"
+BORDER = "#30363D"
+TEXT_PRIMARY = "#F0F3F6"  # Bright white for maximum crispness
+TEXT_MUTED = "#919EAB"  # Clear secondary text
 
-GREEN = "#73BF69"
-BLUE = "#5794F2"
-ORANGE = "#FF9830"
-RED = "#F2495C"
-PURPLE = "#B877D9"
-YELLOW = "#FADE2A"
-TEAL = "#37D6C8"
+GREEN = "#56D364"
+BLUE = "#58A6FF"
+ORANGE = "#FFA657"
+RED = "#FF7B72"
+PURPLE = "#D2A8FF"
+YELLOW = "#E3B341"
+TEAL = "#39C5CF"
 
-COLOR_PALETTE = [BLUE, GREEN, ORANGE, RED, PURPLE, YELLOW, TEAL, "#8AB8FF"]
+COLOR_PALETTE = [BLUE, GREEN, ORANGE, RED, PURPLE, YELLOW, TEAL, "#79C0FF"]
 MACHINE_COLUMNS = [
     "Machine Name",
     "Quantity",
@@ -67,11 +67,11 @@ MACHINE_COLUMNS = [
     "Peak Hours/day",
     "Off-Peak Hours/day",
 ]
-VAT_RATE = 0.07  # 7% VAT
+VAT_RATE = 0.07
 
 
 # =====================================================================================
-# PERSISTENT CONFIG FUNCTIONS (JSON Storage for Departments & Machines)
+# PERSISTENT CONFIG FUNCTIONS
 # =====================================================================================
 def load_persistent_config():
   if os.path.exists(CONFIG_FILE):
@@ -85,7 +85,6 @@ def load_persistent_config():
           if dept in raw_mach and isinstance(raw_mach[dept], list):
             departments_dict[dept] = pd.DataFrame(raw_mach[dept])
           else:
-            # Default 8 machines if new department added
             default_list = [
                 {
                     "Machine Name": f"เครื่องที่ {i}",
@@ -101,7 +100,6 @@ def load_persistent_config():
     except Exception:
       pass
 
-  # Fallback default initialization
   depts = DEFAULT_DEPARTMENTS
   departments_dict = {}
   for dept in depts:
@@ -139,22 +137,25 @@ def save_persistent_config(depts, departments_dict):
 LANG = {
     "en": {
         "brand_title": "🍄 MycoFactory",
-        "brand_caption": "Energy & Cost Management System",
-        "language": "Language",
+        "brand_caption": "Energy & Cost Management",
         "nav_dashboard": "📊 Dashboard",
         "nav_data_entry": "📝 Data Entry & Excel",
         "nav_settings": "⚙️ Settings",
         "billing_cycle": "Billing cycle",
         "days": "days",
         "departments_tracked": "Departments tracked",
-        "footer": "v2.1 · Streamlit + Plotly",
+        "footer": "v2.2 · High Contrast UI",
         "dash_title": "📊 Factory Energy & Cost Dashboard",
         "dash_caption": (
-            "Real-time overview of energy consumption, billing, and"
-            " departmental cost allocation."
+            "Monitor utility consumption, bills, and plant-specific cost"
+            " allocations."
         ),
-        "select_dash_month": "📅 Select Month to Display",
-        "kpi_total_cost": "TOTAL NET COST (SELECTED MONTH)",
+        "select_dash_month": "📅 Select Month",
+        "select_factory_view": "🏭 Select Factory View",
+        "view_all": "🌐 Combined (All Factory)",
+        "view_pm1": "🏢 PM1 Only",
+        "view_pm2": "🏢 PM2 Only",
+        "kpi_total_cost": "TOTAL NET COST (SELECTED VIEW)",
         "kpi_vs_last_month": "VS. PREVIOUS MONTH",
         "kpi_vs_avg": "VS. 6-MONTH AVERAGE",
         "ref_none": "— no comparison data —",
@@ -165,26 +166,22 @@ LANG = {
         "chip_theoretical": "Theoretical Machine Usage",
         "section_energy_share": "Energy Consumption Share by Department",
         "section_peak_offpeak": "Peak vs. Off-Peak Usage by Department",
-        "no_machine_data": (
-            "No machine data entered yet. Add machines on the Data Entry page."
-        ),
+        "no_machine_data": "No machine data available for this view.",
         "kwh_total": "kWh Total",
         "peak_kwh_legend": "Peak kWh",
         "offpeak_kwh_legend": "Off-Peak kWh",
         "yaxis_kwh_month": "kWh / month",
-        "section_cost_allocation": (
-            "💰 Total Bill Cost Allocation by Department"
-        ),
+        "section_cost_allocation": "💰 Cost Allocation by Department",
         "section_cost_allocation_caption": (
-            "The actual factory bill is distributed proportionally to each"
-            " department's theoretical machine energy usage."
+            "Utility expenses distributed proportionally based on theoretical"
+            " machine energy consumption."
         ),
         "col_department": "Department",
         "col_theoretical_kwh": "Theoretical kWh",
         "col_share_pct": "Share %",
         "col_allocated_cost": "Allocated Cost",
         "xaxis_allocated_cost": "Allocated Cost (THB)",
-        "expander_bill_breakdown": "🧾 View Full Bill Breakdown",
+        "expander_bill_breakdown": "🧾 View Full Factory Bill Breakdown",
         "bill_energy_cost": "Energy Cost",
         "bill_ft_cost": "Ft Cost",
         "bill_service_charge": "Service Charge",
@@ -192,8 +189,8 @@ LANG = {
         "bill_grand_total": "Grand Total",
         "data_entry_title": "📝 Data Entry & Excel Sync",
         "data_entry_caption": (
-            "Download the Excel template, fill in multi-month history and"
-            " machines, then upload it back, or edit directly below."
+            "Download template, fill multi-month history, and upload back, or"
+            " edit tables directly."
         ),
         "section_excel_title": "📥 Excel Template & File Synchronization",
         "btn_download_template": "Download Excel Template",
@@ -202,7 +199,7 @@ LANG = {
         "section_history_title": "📅 Monthly Energy & Cost History",
         "section_history_caption": (
             "Manage utility bills and solar generation across multiple"
-            " months. Used for historical averages and trends."
+            " months."
         ),
         "section_machines_title": (
             "🏭 Machine Working Hours by Department (Direct Editor)"
@@ -224,13 +221,10 @@ LANG = {
         "label_ft_rate": "Ft Rate (THB/kWh)",
         "label_service_charge": "Monthly Service Charge (THB)",
         "label_billing_days": "Billing Days in Month",
-        "billing_days_help": (
-            "Used to convert daily machine hours into monthly theoretical kWh."
-        ),
         "section_dept_mgmt": "Department Customization Management",
         "add_dept_label": "➕ Add New Department",
         "add_dept_input_label": "New Department Name",
-        "add_dept_placeholder": "e.g. Cold Storage Warehouse PM3",
+        "add_dept_placeholder": "e.g. G Control PM3",
         "add_dept_button": "Add Department",
         "warn_empty_name": "Please enter a department name.",
         "warn_dept_exists": "Department '{name}' already exists.",
@@ -243,49 +237,49 @@ LANG = {
     },
     "th": {
         "brand_title": "🍄 โรงงานเห็ด",
-        "brand_caption": "ระบบบริหารจัดการพลังงานและต้นทุน",
-        "language": "ภาษา",
+        "brand_caption": "ระบบบริหารจัดการพลังงาน",
         "nav_dashboard": "📊 แดชบอร์ด",
         "nav_data_entry": "📝 บันทึกข้อมูล & Excel",
         "nav_settings": "⚙️ ตั้งค่าแผนกและระบบ",
         "billing_cycle": "รอบบิล",
         "days": "วัน",
         "departments_tracked": "แผนกที่ติดตาม",
-        "footer": "v2.1 · Streamlit + Plotly",
+        "footer": "v2.2 · ตัวหนังสือคมชัดสูง",
         "dash_title": "📊 แดชบอร์ดพลังงานและต้นทุนโรงงาน",
         "dash_caption": (
-            "ภาพรวมการใช้พลังงาน ค่าไฟ และการจัดสรรต้นทุนตามแผนกแบบเรียลไทม์"
+            "ติดตามการใช้พลังงาน ค่าไฟ และการจัดสรรต้นทุนแยกตามโรงงาน (PM1 / PM2)"
         ),
-        "select_dash_month": "📅 เลือกเดือนที่ต้องการแสดงผล",
-        "kpi_total_cost": "ต้นทุนสุทธิรวม (เดือนที่เลือก)",
+        "select_dash_month": "📅 เลือกเดือนที่แสดงผล",
+        "select_factory_view": "🏭 เลือกระบบโรงงานที่ต้องการดู",
+        "view_all": "🌐 รวมทั้งโรงงาน (All Factory)",
+        "view_pm1": "🏢 เฉพาะโรงงาน PM1",
+        "view_pm2": "🏢 เฉพาะโรงงาน PM2",
+        "kpi_total_cost": "ต้นทุนสุทธิรวม (มุมมองที่เลือก)",
         "kpi_vs_last_month": "เทียบกับเดือนก่อนหน้า",
         "kpi_vs_avg": "เทียบกับค่าเฉลี่ย 6 เดือน",
         "ref_none": "— ไม่มีข้อมูลเปรียบเทียบ —",
-        "vs_ref": "เทียบกับค่าอ้างอิง",
+        "vs_ref": "เทียบกับอ้างอิง",
         "chip_net_peak": "หน่วย Peak สุทธิ (คิดเงิน)",
         "chip_net_offpeak": "หน่วย Off-Peak สุทธิ (คิดเงิน)",
-        "chip_solar": "พลังงานโซลาร์ที่หักลบแล้ว",
-        "chip_theoretical": "การใช้พลังงานตามทฤษฎีของเครื่องจักร",
+        "chip_solar": "พลังงานโซลาร์ที่หักลบ",
+        "chip_theoretical": "การใช้พลังงานตามทฤษฎีเครื่องจักร",
         "section_energy_share": "สัดส่วนการใช้พลังงานแยกตามแผนก",
         "section_peak_offpeak": "การใช้พลังงาน Peak เทียบ Off-Peak แยกตามแผนก",
-        "no_machine_data": (
-            "ยังไม่มีข้อมูลเครื่องจักร กรุณาเพิ่มข้อมูลที่หน้าบันทึกข้อมูล"
-        ),
+        "no_machine_data": "ยังไม่มีข้อมูลเครื่องจักรในมุมมองนี้",
         "kwh_total": "หน่วยรวม (kWh)",
         "peak_kwh_legend": "Peak (kWh)",
         "offpeak_kwh_legend": "Off-Peak (kWh)",
         "yaxis_kwh_month": "kWh / เดือน",
-        "section_cost_allocation": "💰 การจัดสรรค่าไฟทั้งหมดแยกตามแผนก",
+        "section_cost_allocation": "💰 การจัดสรรต้นทุนค่าไฟแยกตามแผนก",
         "section_cost_allocation_caption": (
-            "ค่าไฟจริงของโรงงานจะถูกแบ่งตามสัดส่วนการใช้พลังงานตามทฤษฎี"
-            " ของเครื่องจักรในแต่ละแผนก"
+            "ค่าไฟโรงงานถูกกระจายสัดส่วนตามการใช้พลังงานตามทฤษฎีของเครื่องจักร"
         ),
         "col_department": "แผนก",
         "col_theoretical_kwh": "kWh ตามทฤษฎี",
         "col_share_pct": "สัดส่วน %",
         "col_allocated_cost": "ต้นทุนที่จัดสรร",
         "xaxis_allocated_cost": "ต้นทุนที่จัดสรร (บาท)",
-        "expander_bill_breakdown": "🧾 ดูรายละเอียดค่าไฟทั้งหมด",
+        "expander_bill_breakdown": "🧾 ดูรายละเอียดบิลค่าไฟภาพรวมโรงงาน",
         "bill_energy_cost": "ค่าพลังงาน",
         "bill_ft_cost": "ค่า Ft",
         "bill_service_charge": "ค่าบริการรายเดือน",
@@ -303,7 +297,6 @@ LANG = {
         "section_history_title": "📅 ประวัติข้อมูลพลังงานและค่าใช้จ่ายรายเดือน",
         "section_history_caption": (
             "จัดการข้อมูลบิลค่าไฟและโซลาร์เซลล์ย้อนหลังหลายเดือน"
-            " เพื่อใช้คำนวณค่าเฉลี่ยและดูแนวโน้ม"
         ),
         "section_machines_title": (
             "🏭 ชั่วโมงการทำงานของเครื่องจักรแยกตามแผนก (แก้ไขในเว็บ)"
@@ -324,9 +317,6 @@ LANG = {
         "label_ft_rate": "อัตราค่า Ft (บาท/kWh)",
         "label_service_charge": "ค่าบริการรายเดือน (บาท)",
         "label_billing_days": "จำนวนวันในรอบบิล",
-        "billing_days_help": (
-            "ใช้แปลงชั่วโมงการทำงานต่อวันเป็น kWh ตามทฤษฎีต่อเดือน"
-        ),
         "section_dept_mgmt": "จัดการแผนกอิสระ (เพิ่ม/ลบ แผนก)",
         "add_dept_label": "➕ เพิ่มแผนกใหม่",
         "add_dept_input_label": "ชื่อแผนกใหม่",
@@ -350,16 +340,17 @@ def t(key: str, **kwargs) -> str:
 
 
 # =====================================================================================
-# CUSTOM CSS — Dark Grafana Theme + Collapsed Sidebar Fix
+# CUSTOM CSS — HIGH CONTRAST & SHARP UI (Fixed Dropdowns & Tables)
 # =====================================================================================
 def inject_css():
   st.markdown(
       f"""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
 
         html, body, [class*="css"] {{
             font-family: 'Inter', sans-serif;
+            color: {TEXT_PRIMARY};
         }}
 
         #MainMenu {{visibility: hidden;}}
@@ -373,93 +364,150 @@ def inject_css():
             padding-bottom: 3rem;
         }}
 
-        h1, h2, h3, p, span, label, div {{ color: {TEXT_PRIMARY}; }}
-        .stCaption, [data-testid="stCaptionContainer"] {{ color: {TEXT_MUTED} !important; }}
+        /* Typography Sharpness */
+        h1, h2, h3, h4, h5, h6 {{
+            color: {TEXT_PRIMARY} !important;
+            font-weight: 700 !important;
+        }}
+        p, span, label, div {{
+            color: {TEXT_PRIMARY};
+        }}
+        .stCaption, [data-testid="stCaptionContainer"] {{
+            color: {TEXT_MUTED} !important;
+            font-size: 0.85rem;
+        }}
 
-        /* Sidebar Styling & Collapsed State */
+        /* Sidebar Styling */
         section[data-testid="stSidebar"] {{
             background: linear-gradient(180deg, #0B0D10 0%, #14171B 100%);
             border-right: 1px solid {BORDER};
         }}
-        section[data-testid="stSidebar"] * {{ color: {TEXT_PRIMARY} !important; }}
-        section[data-testid="stSidebar"] .stCaption {{ color: {TEXT_MUTED} !important; }}
+        section[data-testid="stSidebar"] * {{
+            color: {TEXT_PRIMARY} !important;
+        }}
 
+        /* SECTION TITLES */
         .section-title {{
-            font-size: 1.02rem;
+            font-size: 1.05rem;
             font-weight: 700;
             color: {TEXT_PRIMARY};
-            margin-top: 0.3rem;
-            margin-bottom: 0.7rem;
+            margin-top: 0.4rem;
+            margin-bottom: 0.8rem;
             border-left: 4px solid {BLUE};
             padding-left: 10px;
             letter-spacing: 0.01em;
         }}
 
+        /* KPI CARDS */
         .kpi-card {{
             background: {BG_PANEL};
             border: 1px solid {BORDER};
             border-radius: 8px;
             padding: 18px 20px;
             height: 100%;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }}
         .kpi-title {{
-            font-size: 0.72rem;
-            font-weight: 600;
+            font-size: 0.75rem;
+            font-weight: 700;
             color: {TEXT_MUTED};
             text-transform: uppercase;
-            letter-spacing: 0.07em;
-            margin-bottom: 10px;
+            letter-spacing: 0.08em;
+            margin-bottom: 8px;
         }}
         .kpi-value {{
             font-family: 'JetBrains Mono', monospace;
             font-size: 2.1rem;
             font-weight: 700;
-            margin-bottom: 8px;
+            color: {TEXT_PRIMARY};
+            margin-bottom: 6px;
         }}
-        .kpi-sub {{ font-size: 0.82rem; font-weight: 600; }}
+        .kpi-sub {{ font-size: 0.85rem; font-weight: 600; }}
         .kpi-up {{ color: {RED}; }}
         .kpi-down {{ color: {GREEN}; }}
         .kpi-flat {{ color: {TEXT_MUTED}; }}
         .kpi-primary-value {{ color: {GREEN}; }}
-        .kpi-secondary-value {{ color: {TEXT_PRIMARY}; }}
 
+        /* CHIPS */
         .chip-card {{
             background: {BG_PANEL_ALT};
             border: 1px solid {BORDER};
             border-radius: 8px;
             padding: 12px 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
         }}
         .chip-label {{
-            font-size: 0.68rem; color: {TEXT_MUTED}; font-weight: 600;
-            text-transform: uppercase; letter-spacing: 0.05em;
+            font-size: 0.7rem; color: {TEXT_MUTED}; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.06em;
         }}
         .chip-value {{
             font-family: 'JetBrains Mono', monospace;
-            font-size: 1.15rem; color: {TEXT_PRIMARY}; font-weight: 700; margin-top: 4px;
+            font-size: 1.2rem; color: {TEXT_PRIMARY}; font-weight: 700; margin-top: 4px;
         }}
 
         .chart-panel {{
             background: {BG_PANEL};
             border: 1px solid {BORDER};
             border-radius: 8px;
-            padding: 14px 14px 4px 14px;
+            padding: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }}
 
-        .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] {{
+        /* DROPDOWNS & INPUTS HIGH CONTRAST FIX */
+        .stTextInput input, .stNumberInput input {{
+            background-color: {BG_PANEL_ALT} !important;
+            color: {TEXT_PRIMARY} !important;
+            border: 1px solid {BORDER} !important;
+            border-radius: 6px !important;
+            font-weight: 600;
+        }}
+
+        /* Streamlit Selectbox Fix (High Contrast Text & Background) */
+        div[data-baseweb="select"] > div {{
             background-color: {BG_PANEL_ALT} !important;
             color: {TEXT_PRIMARY} !important;
             border: 1px solid {BORDER} !important;
             border-radius: 6px !important;
         }}
+        div[data-baseweb="select"] span {{
+            color: {TEXT_PRIMARY} !important;
+            font-weight: 600 !important;
+        }}
+        div[data-baseweb="popover"] div, div[role="listbox"] div {{
+            background-color: {BG_PANEL_ALT} !important;
+            color: {TEXT_PRIMARY} !important;
+        }}
+        div[role="option"] {{
+            background-color: {BG_PANEL_ALT} !important;
+            color: {TEXT_PRIMARY} !important;
+        }}
+        div[role="option"]:hover {{
+            background-color: {BORDER} !important;
+            color: {TEXT_PRIMARY} !important;
+        }}
 
+        /* BUTTONS */
         .stButton > button {{
             border-radius: 6px;
             font-weight: 600;
             border: 1px solid {BORDER};
+            background-color: {BG_PANEL_ALT};
+            color: {TEXT_PRIMARY};
+        }}
+        .stButton > button:hover {{
+            border-color: {BLUE};
+            color: {BLUE};
         }}
 
+        /* DATAFRAMES / TABLES SHARPNESS */
         [data-testid="stDataFrame"], [data-testid="stDataEditor"] {{
-            border-radius: 8px; overflow: hidden; border: 1px solid {BORDER};
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid {BORDER};
+            background-color: {BG_PANEL};
+        }}
+        table {{
+            color: {TEXT_PRIMARY} !important;
         }}
 
         details {{
@@ -468,7 +516,7 @@ def inject_css():
             border-radius: 8px !important;
         }}
 
-        hr {{ border-color: {BORDER}; margin: 0.6rem 0 1.2rem 0; }}
+        hr {{ border-color: {BORDER}; margin: 0.8rem 0 1.4rem 0; }}
     </style>
     """,
       unsafe_allow_html=True,
@@ -483,7 +531,7 @@ PLOTLY_LAYOUT = dict(
 
 
 # =====================================================================================
-# INITIALIZE SESSION STATE WITH PERSISTENT JSON DATA
+# INITIALIZE SESSION STATE
 # =====================================================================================
 def init_session_state():
   defaults = {
@@ -492,19 +540,17 @@ def init_session_state():
       "ft_rate": 0.2000,
       "service_charge": 312.24,
       "billing_days": 30,
-      "lang": "en",
+      "lang": "th",  # Default Thai language for convenience
   }
   for k, v in defaults.items():
     if k not in st.session_state:
       st.session_state[k] = v
 
-  # Load departments and machines from persistent JSON file
   if "departments_list" not in st.session_state or "departments" not in st.session_state:
     depts, depts_dict = load_persistent_config()
     st.session_state.departments_list = depts
     st.session_state.departments = depts_dict
 
-  # Default Multi-Month History
   if "monthly_history" not in st.session_state:
     st.session_state.monthly_history = pd.DataFrame([
         {
@@ -571,7 +617,7 @@ def init_session_state():
 
 
 # =====================================================================================
-# EXCEL TEMPLATE & EXPORT / IMPORT ENGINE
+# EXCEL ENGINE
 # =====================================================================================
 def create_excel_template() -> bytes:
   output = io.BytesIO()
@@ -632,7 +678,7 @@ def process_uploaded_excel(uploaded_file):
 
 
 # =====================================================================================
-# CALCULATION ENGINE
+# CALCULATIONS
 # =====================================================================================
 def compute_department_theoretical_kwh(departments, depts_list, billing_days):
   rows = []
@@ -703,40 +749,8 @@ def allocate_cost(dept_theoretical: pd.DataFrame, grand_total: float) -> pd.Data
   return df
 
 
-def run_calculation_for_month(row_data):
-  billing_days = int(st.session_state.billing_days)
-  dept_theo = compute_department_theoretical_kwh(
-      st.session_state.departments,
-      st.session_state.departments_list,
-      billing_days,
-  )
-  net_peak, net_offpeak, solar_peak, solar_offpeak = compute_net_bill(
-      row_data["Actual Peak kWh"],
-      row_data["Actual Off-Peak kWh"],
-      row_data["Solar kWh"],
-  )
-  cost = compute_total_cost(
-      net_peak,
-      net_offpeak,
-      st.session_state.peak_rate,
-      st.session_state.offpeak_rate,
-      st.session_state.ft_rate,
-      st.session_state.service_charge,
-  )
-  allocation = allocate_cost(dept_theo, cost["grand_total"])
-  return {
-      "dept_theo": dept_theo,
-      "net_peak": net_peak,
-      "net_offpeak": net_offpeak,
-      "solar_peak": solar_peak,
-      "solar_offpeak": solar_offpeak,
-      "cost": cost,
-      "allocation": allocation,
-  }
-
-
 # =====================================================================================
-# UI HELPER COMPONENTS
+# UI HELPERS
 # =====================================================================================
 def fmt_thb(value):
   return f"฿{value:,.2f}"
@@ -746,13 +760,7 @@ def fmt_kwh(value):
   return f"{value:,.0f} kWh"
 
 
-def kpi_card(
-    title,
-    value_str,
-    delta_val,
-    delta_pct,
-    value_color_class="kpi-secondary-value",
-):
+def kpi_card(title, value_str, delta_val, delta_pct, primary=False):
   if delta_val is None:
     sub_html = f'<div class="kpi-sub kpi-flat">{t("ref_none")}</div>'
   else:
@@ -767,11 +775,12 @@ def kpi_card(
         f' {t("vs_ref")}</div>'
     )
 
+  val_class = "kpi-primary-value" if primary else "kpi-value"
   st.markdown(
       f"""
         <div class="kpi-card">
             <div class="kpi-title">{title}</div>
-            <div class="kpi-value {value_color_class}">{value_str}</div>
+            <div class="{val_class}" style="font-family:'JetBrains Mono', monospace; font-size: 2.1rem; font-weight:700; margin-bottom: 6px;">{value_str}</div>
             {sub_html}
         </div>
     """,
@@ -792,7 +801,7 @@ def chip_metric(label, value):
 
 
 # =====================================================================================
-# PAGE 1 — DASHBOARD
+# PAGE 1 — DASHBOARD (With PM1 / PM2 / All Split View)
 # =====================================================================================
 def page_dashboard():
   st.markdown(f"## {t('dash_title')}")
@@ -807,34 +816,108 @@ def page_dashboard():
   months_list = history_df["Month"].tolist()
   default_index = len(months_list) - 1 if months_list else 0
 
-  col_sel, _ = st.columns([1, 2])
-  with col_sel:
+  # Controls for Month & Factory View Selection
+  col_sel1, col_sel2 = st.columns([1, 1])
+  with col_sel1:
     selected_month = st.selectbox(
         t("select_dash_month"), options=months_list, index=default_index
     )
+  with col_sel2:
+    factory_view = st.selectbox(
+        t("select_factory_view"),
+        options=[t("view_all"), t("view_pm1"), t("view_pm2")],
+    )
+
+  # Filter departments based on selection
+  all_depts_list = st.session_state.departments_list
+  if factory_view == t("view_pm1"):
+    filtered_depts = [d for d in all_depts_list if "PM1" in d.upper()]
+  elif factory_view == t("view_pm2"):
+    filtered_depts = [d for d in all_depts_list if "PM2" in d.upper()]
+  else:
+    filtered_depts = all_depts_list
+
+  billing_days = int(st.session_state.billing_days)
+  dept_theo_all = compute_department_theoretical_kwh(
+      st.session_state.departments, all_depts_list, billing_days
+  )
+  dept_theo_filtered = compute_department_theoretical_kwh(
+      st.session_state.departments, filtered_depts, billing_days
+  )
+
+  # Total factory theoretical vs filtered theoretical for cost scaling
+  total_factory_theo_kwh = dept_theo_all["Total kWh"].sum()
+  filtered_theo_kwh = dept_theo_filtered["Total kWh"].sum()
+
+  view_ratio = (
+      (filtered_theo_kwh / total_factory_theo_kwh)
+      if total_factory_theo_kwh > 0
+      else 1.0
+  )
 
   row_data = history_df[history_df["Month"] == selected_month].iloc[0]
-  results = run_calculation_for_month(row_data)
 
-  cost = results["cost"]
-  dept_theo = results["dept_theo"]
-  allocation = results["allocation"]
-  grand_total = cost["grand_total"]
+  # Compute full factory bill
+  net_peak, net_offpeak, solar_peak, solar_offpeak = compute_net_bill(
+      row_data["Actual Peak kWh"],
+      row_data["Actual Off-Peak kWh"],
+      row_data["Solar kWh"],
+  )
+  full_cost = compute_total_cost(
+      net_peak,
+      net_offpeak,
+      st.session_state.peak_rate,
+      st.session_state.offpeak_rate,
+      st.session_state.ft_rate,
+      st.session_state.service_charge,
+  )
 
+  # Apply ratio if viewing PM1 or PM2 specifically
+  grand_total = full_cost["grand_total"] * view_ratio
+  view_net_peak = net_peak * view_ratio
+  view_net_offpeak = net_offpeak * view_ratio
+  view_solar = (solar_peak + solar_offpeak) * view_ratio
+
+  allocation = allocate_cost(dept_theo_filtered, grand_total)
+
+  # Last month comparison
   sel_idx = months_list.index(selected_month)
   last_month_cost = None
   if sel_idx > 0:
     prev_row = history_df[history_df["Month"] == months_list[sel_idx - 1]].iloc[0]
-    prev_results = run_calculation_for_month(prev_row)
-    last_month_cost = prev_results["cost"]["grand_total"]
+    p_peak, p_off, _, _ = compute_net_bill(
+        prev_row["Actual Peak kWh"],
+        prev_row["Actual Off-Peak kWh"],
+        prev_row["Solar kWh"],
+    )
+    p_cost = compute_total_cost(
+        p_peak,
+        p_off,
+        st.session_state.peak_rate,
+        st.session_state.offpeak_rate,
+        st.session_state.ft_rate,
+        st.session_state.service_charge,
+    )
+    last_month_cost = p_cost["grand_total"] * view_ratio
 
   delta_vs_last = grand_total - last_month_cost if last_month_cost else None
   pct_vs_last = (delta_vs_last / last_month_cost * 100) if last_month_cost else 0
 
+  # 6-Month Average
   all_costs = []
   for _, r in history_df.iterrows():
-    res = run_calculation_for_month(r)
-    all_costs.append(res["cost"]["grand_total"])
+    r_peak, r_off, _, _ = compute_net_bill(
+        r["Actual Peak kWh"], r["Actual Off-Peak kWh"], r["Solar kWh"]
+    )
+    r_c = compute_total_cost(
+        r_peak,
+        r_off,
+        st.session_state.peak_rate,
+        st.session_state.offpeak_rate,
+        st.session_state.ft_rate,
+        st.session_state.service_charge,
+    )
+    all_costs.append(r_c["grand_total"] * view_ratio)
   six_avg = (
       sum(all_costs[-6:]) / min(len(all_costs), 6) if all_costs else grand_total
   )
@@ -842,14 +925,11 @@ def page_dashboard():
   delta_vs_avg = grand_total - six_avg
   pct_vs_avg = (delta_vs_avg / six_avg * 100) if six_avg > 0 else 0
 
+  # KPIs
   c1, c2, c3 = st.columns(3)
   with c1:
     kpi_card(
-        t("kpi_total_cost"),
-        fmt_thb(grand_total),
-        None,
-        None,
-        "kpi-primary-value",
+        t("kpi_total_cost"), fmt_thb(grand_total), None, None, primary=True
     )
   with c2:
     kpi_card(
@@ -865,16 +945,13 @@ def page_dashboard():
 
   s1, s2, s3, s4 = st.columns(4)
   with s1:
-    chip_metric(t("chip_net_peak"), fmt_kwh(results["net_peak"]))
+    chip_metric(t("chip_net_peak"), fmt_kwh(view_net_peak))
   with s2:
-    chip_metric(t("chip_net_offpeak"), fmt_kwh(results["net_offpeak"]))
+    chip_metric(t("chip_net_offpeak"), fmt_kwh(view_net_offpeak))
   with s3:
-    chip_metric(
-        t("chip_solar"),
-        fmt_kwh(results["solar_peak"] + results["solar_offpeak"]),
-    )
+    chip_metric(t("chip_solar"), fmt_kwh(view_solar))
   with s4:
-    chip_metric(t("chip_theoretical"), fmt_kwh(dept_theo["Total kWh"].sum()))
+    chip_metric(t("chip_theoretical"), fmt_kwh(filtered_theo_kwh))
 
   st.write("")
   st.write("")
@@ -887,18 +964,18 @@ def page_dashboard():
         unsafe_allow_html=True,
     )
     st.markdown('<div class="chart-panel">', unsafe_allow_html=True)
-    if dept_theo["Total kWh"].sum() > 0:
+    if filtered_theo_kwh > 0:
       fig_donut = go.Figure(
           data=[
               go.Pie(
-                  labels=dept_theo["Department"],
-                  values=dept_theo["Total kWh"],
+                  labels=dept_theo_filtered["Department"],
+                  values=dept_theo_filtered["Total kWh"],
                   hole=0.58,
                   marker=dict(
                       colors=COLOR_PALETTE, line=dict(color=BG_PANEL, width=2)
                   ),
                   textinfo="percent",
-                  textfont=dict(size=13, color=TEXT_PRIMARY),
+                  textfont=dict(size=13, color=TEXT_PRIMARY, weight="bold"),
                   hovertemplate=(
                       "<b>%{label}</b><br>%{value:,.0f}"
                       " kWh<br>%{percent}<extra></extra>"
@@ -920,14 +997,13 @@ def page_dashboard():
           annotations=[
               dict(
                   text=(
-                      f"{dept_theo['Total kWh'].sum():,.0f}<br>"
-                      f"{t('kwh_total')}"
+                      f"{filtered_theo_kwh:,.0f}<br>{t('kwh_total')}"
                   ),
                   x=0.5,
                   y=0.5,
                   font_size=14,
                   showarrow=False,
-                  font=dict(color=TEXT_PRIMARY),
+                  font=dict(color=TEXT_PRIMARY, weight="bold"),
               )
           ],
           margin=dict(t=10, b=10, l=10, r=10),
@@ -944,52 +1020,55 @@ def page_dashboard():
         unsafe_allow_html=True,
     )
     st.markdown('<div class="chart-panel">', unsafe_allow_html=True)
-    fig_bar = go.Figure()
-    fig_bar.add_trace(
-        go.Bar(
-            name=t("peak_kwh_legend"),
-            x=dept_theo["Department"],
-            y=dept_theo["Peak kWh"],
-            marker_color=RED,
-            hovertemplate=(
-                "<b>%{x}</b><br>"
-                + t("peak_kwh_legend")
-                + ": %{y:,.0f}<extra></extra>"
-            ),
-        )
-    )
-    fig_bar.add_trace(
-        go.Bar(
-            name=t("offpeak_kwh_legend"),
-            x=dept_theo["Department"],
-            y=dept_theo["Off-Peak kWh"],
-            marker_color=BLUE,
-            hovertemplate=(
-                "<b>%{x}</b><br>"
-                + t("offpeak_kwh_legend")
-                + ": %{y:,.0f}<extra></extra>"
-            ),
-        )
-    )
-    fig_bar.update_layout(
-        **PLOTLY_LAYOUT,
-        barmode="group",
-        height=380,
-        margin=dict(t=10, b=10, l=10, r=10),
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1,
-            font=dict(color=TEXT_PRIMARY),
-        ),
-        yaxis=dict(
-            title=t("yaxis_kwh_month"), gridcolor=BORDER, color=TEXT_PRIMARY
-        ),
-        xaxis=dict(title=None, color=TEXT_PRIMARY),
-    )
-    st.plotly_chart(fig_bar, use_container_width=True)
+    if filtered_theo_kwh > 0:
+      fig_bar = go.Figure()
+      fig_bar.add_trace(
+          go.Bar(
+              name=t("peak_kwh_legend"),
+              x=dept_theo_filtered["Department"],
+              y=dept_theo_filtered["Peak kWh"],
+              marker_color=RED,
+              hovertemplate=(
+                  "<b>%{x}</b><br>"
+                  + t("peak_kwh_legend")
+                  + ": %{y:,.0f}<extra></extra>"
+              ),
+          )
+      )
+      fig_bar.add_trace(
+          go.Bar(
+              name=t("offpeak_kwh_legend"),
+              x=dept_theo_filtered["Department"],
+              y=dept_theo_filtered["Off-Peak kWh"],
+              marker_color=BLUE,
+              hovertemplate=(
+                  "<b>%{x}</b><br>"
+                  + t("offpeak_kwh_legend")
+                  + ": %{y:,.0f}<extra></extra>"
+              ),
+          )
+      )
+      fig_bar.update_layout(
+          **PLOTLY_LAYOUT,
+          barmode="group",
+          height=380,
+          margin=dict(t=10, b=10, l=10, r=10),
+          legend=dict(
+              orientation="h",
+              yanchor="bottom",
+              y=1.02,
+              xanchor="right",
+              x=1,
+              font=dict(color=TEXT_PRIMARY),
+          ),
+          yaxis=dict(
+              title=t("yaxis_kwh_month"), gridcolor=BORDER, color=TEXT_PRIMARY
+          ),
+          xaxis=dict(title=None, color=TEXT_PRIMARY),
+      )
+      st.plotly_chart(fig_bar, use_container_width=True)
+    else:
+      st.info(t("no_machine_data"))
     st.markdown("</div>", unsafe_allow_html=True)
 
   st.write("")
@@ -1000,84 +1079,91 @@ def page_dashboard():
   )
   st.caption(t("section_cost_allocation_caption"))
 
-  alloc_sorted = allocation.sort_values("Allocated Cost (THB)", ascending=True)
+  if filtered_theo_kwh > 0:
+    alloc_sorted = allocation.sort_values(
+        "Allocated Cost (THB)", ascending=True
+    )
 
-  col_chart, col_table = st.columns([1.1, 1])
-  with col_chart:
-    st.markdown('<div class="chart-panel">', unsafe_allow_html=True)
-    fig_alloc = go.Figure(
-        go.Bar(
-            x=alloc_sorted["Allocated Cost (THB)"],
-            y=alloc_sorted["Department"],
-            orientation="h",
-            marker=dict(
-                color=alloc_sorted["Allocated Cost (THB)"],
-                colorscale=[[0, "#1F5C4F"], [1, GREEN]],
-            ),
-            text=[fmt_thb(v) for v in alloc_sorted["Allocated Cost (THB)"]],
-            textposition="outside",
-            textfont=dict(color=TEXT_PRIMARY),
-            hovertemplate="<b>%{y}</b><br>%{x:,.2f} THB<extra></extra>",
-        )
-    )
-    fig_alloc.update_layout(
-        **PLOTLY_LAYOUT,
-        height=340,
-        margin=dict(t=10, b=10, l=10, r=40),
-        xaxis=dict(
-            title=t("xaxis_allocated_cost"),
-            gridcolor=BORDER,
-            color=TEXT_PRIMARY,
-        ),
-        yaxis=dict(color=TEXT_PRIMARY),
-    )
-    st.plotly_chart(fig_alloc, use_container_width=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+    col_chart, col_table = st.columns([1.1, 1])
+    with col_chart:
+      st.markdown('<div class="chart-panel">', unsafe_allow_html=True)
+      fig_alloc = go.Figure(
+          go.Bar(
+              x=alloc_sorted["Allocated Cost (THB)"],
+              y=alloc_sorted["Department"],
+              orientation="h",
+              marker=dict(
+                  color=alloc_sorted["Allocated Cost (THB)"],
+                  colorscale=[[0, "#1F5C4F"], [1, GREEN]],
+              ),
+              text=[fmt_thb(v) for v in alloc_sorted["Allocated Cost (THB)"]],
+              textposition="outside",
+              textfont=dict(color=TEXT_PRIMARY, weight="bold"),
+              hovertemplate="<b>%{y}</b><br>%{x:,.2f} THB<extra></extra>",
+          )
+      )
+      fig_alloc.update_layout(
+          **PLOTLY_LAYOUT,
+          height=340,
+          margin=dict(t=10, b=10, l=10, r=40),
+          xaxis=dict(
+              title=t("xaxis_allocated_cost"),
+              gridcolor=BORDER,
+              color=TEXT_PRIMARY,
+          ),
+          yaxis=dict(color=TEXT_PRIMARY),
+      )
+      st.plotly_chart(fig_alloc, use_container_width=True)
+      st.markdown("</div>", unsafe_allow_html=True)
 
-  with col_table:
-    display_df = allocation[
-        ["Department", "Total kWh", "Share %", "Allocated Cost (THB)"]
-    ].copy()
-    display_df = display_df.sort_values("Allocated Cost (THB)", ascending=False)
-    display_df.columns = [
-        t("col_department"),
-        t("col_theoretical_kwh"),
-        t("col_share_pct"),
-        t("col_allocated_cost"),
-    ]
-    st.dataframe(
-        display_df,
-        column_config={
-            t("col_theoretical_kwh"): st.column_config.NumberColumn(
-                t("col_theoretical_kwh"), format="%.0f"
-            ),
-            t("col_share_pct"): st.column_config.NumberColumn(
-                t("col_share_pct"), format="%.1f%%"
-            ),
-            t("col_allocated_cost"): st.column_config.NumberColumn(
-                t("col_allocated_cost"), format="฿%.2f"
-            ),
-        },
-        hide_index=True,
-        use_container_width=True,
-        height=340,
-    )
+    with col_table:
+      display_df = allocation[
+          ["Department", "Total kWh", "Share %", "Allocated Cost (THB)"]
+      ].copy()
+      display_df = display_df.sort_values(
+          "Allocated Cost (THB)", ascending=False
+      )
+      display_df.columns = [
+          t("col_department"),
+          t("col_theoretical_kwh"),
+          t("col_share_pct"),
+          t("col_allocated_cost"),
+      ]
+      st.dataframe(
+          display_df,
+          column_config={
+              t("col_theoretical_kwh"): st.column_config.NumberColumn(
+                  t("col_theoretical_kwh"), format="%.0f"
+              ),
+              t("col_share_pct"): st.column_config.NumberColumn(
+                  t("col_share_pct"), format="%.1f%%"
+              ),
+              t("col_allocated_cost"): st.column_config.NumberColumn(
+                  t("col_allocated_cost"), format="฿%.2f"
+              ),
+          },
+          hide_index=True,
+          use_container_width=True,
+          height=340,
+      )
+  else:
+    st.info(t("no_machine_data"))
 
   with st.expander(t("expander_bill_breakdown")):
     b1, b2, b3, b4, b5 = st.columns(5)
-    b1.metric(t("bill_energy_cost"), fmt_thb(cost["energy_cost"]))
-    b2.metric(t("bill_ft_cost"), fmt_thb(cost["ft_cost"]))
-    b3.metric(t("bill_service_charge"), fmt_thb(cost["service_charge"]))
-    b4.metric(t("bill_vat"), fmt_thb(cost["vat"]))
-    b5.metric(t("bill_grand_total"), fmt_thb(cost["grand_total"]))
+    b1.metric(t("bill_energy_cost"), fmt_thb(full_cost["energy_cost"]))
+    b2.metric(t("bill_ft_cost"), fmt_thb(full_cost["ft_cost"]))
+    b3.metric(t("bill_service_charge"), fmt_thb(full_cost["service_charge"]))
+    b4.metric(t("bill_vat"), fmt_thb(full_cost["vat"]))
+    b5.metric(t("bill_grand_total"), fmt_thb(full_cost["grand_total"]))
 
 
 # =====================================================================================
-# PAGE 2 — DATA ENTRY & EXCEL SYNC (Auto-saves to persistent JSON)
+# PAGE 2 — DATA ENTRY & EXCEL SYNC
 # =====================================================================================
 def page_data_entry():
   st.markdown(f"## {t('data_entry_title')}")
-  st.caption(t("data_entry_caption"))
+  st.caption(t('data_entry_caption'))
   st.markdown("<hr/>", unsafe_allow_html=True)
 
   st.markdown(
@@ -1140,7 +1226,6 @@ def page_data_entry():
       unsafe_allow_html=True,
   )
 
-  # Loop through all configured departments
   for dept in list(st.session_state.departments_list):
     if dept not in st.session_state.departments:
       st.session_state.departments[dept] = pd.DataFrame(columns=MACHINE_COLUMNS)
@@ -1190,14 +1275,13 @@ def page_data_entry():
           },
       )
       st.session_state.departments[dept] = edited_df
-      # Auto-save changes permanently to JSON
       save_persistent_config(
           st.session_state.departments_list, st.session_state.departments
       )
 
 
 # =====================================================================================
-# PAGE 3 — SETTINGS (Add/Remove Departments & Rates Config)
+# PAGE 3 — SETTINGS
 # =====================================================================================
 def page_settings():
   st.markdown(f"## {t('settings_title')}")
@@ -1248,7 +1332,6 @@ def page_settings():
       max_value=31,
       step=1,
       key="billing_days",
-      help=t("billing_days_help"),
   )
 
   st.write("")
@@ -1274,7 +1357,6 @@ def page_settings():
         st.warning(t("warn_dept_exists", name=name))
       else:
         st.session_state.departments_list.append(name)
-        # Initialize default 2 machines for new dept
         st.session_state.departments[name] = pd.DataFrame([
             {
                 "Machine Name": "เครื่องที่ 1",
@@ -1314,7 +1396,7 @@ def page_settings():
       st.info(t("info_no_departments"))
 
   st.write("")
-  st.markdown("### 📋 แผนกทั้งหมดที่เปิดใช้งานในระบบปัจจุบัน:")
+  st.markdown("### 📋 แผนกทั้งหมดในระบบปัจจุบัน:")
   for idx, d in enumerate(st.session_state.departments_list):
     count = (
         len(st.session_state.departments[d])
@@ -1329,10 +1411,10 @@ def page_settings():
 # =====================================================================================
 def render_sidebar():
   with st.sidebar:
-    lang_options = {"English": "en", "ไทย": "th"}
-    current_label = "English" if st.session_state.lang == "en" else "ไทย"
+    lang_options = {"ไทย": "th", "English": "en"}
+    current_label = "ไทย" if st.session_state.lang == "th" else "English"
     chosen = st.selectbox(
-        "🌐 " + t("language"),
+        "🌐 ภาษา / Language",
         options=list(lang_options.keys()),
         index=list(lang_options.keys()).index(current_label),
         key="lang_select",
