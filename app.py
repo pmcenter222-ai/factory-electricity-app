@@ -1,114 +1,254 @@
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(page_title="Factory Energy Dashboard", layout="wide")
+# ตั้งค่าหน้าเว็บให้เต็มจอและดูสบายตา
+st.set_page_config(
+    page_title="Factory Energy & Cost Management",
+    page_icon="⚡",
+    layout="wide"
+)
 
-st.title("⚡ แดชบอร์ดคำนวณและวิเคราะห์การใช้ไฟฟ้าโรงงาน")
-st.markdown("วิเคราะห์พลังงานรายแผนก หักลบโซล่าเซลล์ เทียบกับเดือนก่อนหน้า และค่าเฉลี่ยย้อนหลัง")
+# --- 1. ระบบจัดการข้อมูลกลาง (Session State) ---
+if 'departments' not in st.session_state:
+    st.session_state['departments'] = {
+        "แผนกเพาะเชื้อและห้องเย็น": [
+            {"name": "Chiller / Cooling", "qty": 2, "power_kw": 45.0, "peak_hrs": 6.0, "op_hrs": 12.0},
+            {"name": "Autoclave (เครื่องนึ่ง)", "qty": 3, "power_kw": 30.0, "peak_hrs": 4.0, "op_hrs": 8.0}
+        ],
+        "แผนกบรรจุภัณฑ์": [
+            {"name": "Packing Machine", "qty": 1, "power_kw": 15.0, "peak_hrs": 5.0, "op_hrs": 10.0},
+            {"name": "Conveyor Belt", "qty": 4, "power_kw": 3.5, "peak_hrs": 6.0, "op_hrs": 12.0}
+        ]
+    }
 
-# Sidebar: ค่าคงที่และเรทค่าไฟ
-st.sidebar.header("⚙️ ตั้งค่าเรทราคาและโซล่าเซลล์")
-solar_kwh = st.sidebar.number_input("พลังงานโซล่าเซลล์ทั้งหมด (kWh/เดือน)", value=4500.0, step=100.0)
-peak_rate = st.sidebar.number_input("เรทค่าไฟ Peak (บาท/หน่วย)", value=4.1839, format="%.4f")
-op_rate = st.sidebar.number_input("เรทค่าไฟ Off-Peak (บาท/หน่วย)", value=2.6037, format="%.4f")
-ft_rate = st.sidebar.number_input("ค่า Ft (บาท/หน่วย)", value=0.3972, format="%.4f")
-service_charge = st.sidebar.number_input("ค่าบริการรายเดือน (บาท)", value=312.24)
+if 'settings' not in st.session_state:
+    st.session_state['settings'] = {
+        "peak_rate": 4.1839,
+        "op_rate": 2.6037,
+        "ft_rate": 0.3972,
+        "service_charge": 312.24,
+        "last_month_cost": 85400.0,
+        "avg_historic_cost": 82000.0,
+        "days_per_month": 30
+    }
 
-# ข้อมูลเปรียบเทียบเดือนที่แล้วและค่าเฉลี่ย
+if 'bill_data' not in st.session_state:
+    st.session_state['bill_data'] = {
+        "bill_peak_kwh": 12500.0,
+        "bill_op_kwh": 18200.0,
+        "solar_kwh": 4500.0
+    }
+
+# --- 2. เมนูด้านซ้าย (Sidebar Navigation) ---
+st.sidebar.title("⚡ เมนูระบบจัดการพลังงาน")
+menu = st.sidebar.radio(
+    "เลือกหน้าการใช้งาน:",
+    ["📊 หน้าสรุป (Dashboard)", "📝 หน้าลงข้อมูลจริง", "⚙️ หน้า Setting (ตั้งค่า)"]
+)
+
 st.sidebar.markdown("---")
-st.sidebar.header("📊 ข้อมูลเปรียบเทียบอ้างอิง")
-last_month_cost = st.sidebar.number_input("ค่าไฟเดือนที่แล้ว (บาท)", value=85400.0)
-avg_historic_cost = st.sidebar.number_input("ค่าเฉลี่ยย้อนหลัง 6 เดือน (บาท)", value=82000.0)
+st.sidebar.info("💡 **คำแนะนำ:** กรอกข้อมูลบิลและเครื่องจักรที่หน้าลงข้อมูล จากนั้นดูผลวิเคราะห์ที่หน้าสรุป")
 
-# Main input: แยกตามแผนกและเครื่องจักร
-st.subheader("🏭 ข้อมูลการใช้พลังงานแยกตามแผนกและเครื่องจักร")
 
-# จำนวนวันทำงานต่อเดือน
-days_per_month = st.slider("จำนวนวันทำงานต่อเดือน", min_value=1, max_value=31, value=30)
+# ==========================================
+# หน้าที่ 1: หน้าสรุป (Dashboard)
+# ==========================================
+if menu == "📊 หน้าสรุป (Dashboard)":
+    st.title("📊 แดชบอร์ดสรุปการใช้พลังงานและค่าไฟฟ้าโรงงาน")
+    st.markdown("วิเคราะห์สัดส่วนการใช้ไฟฟ้ารายแผนก ต้นทุน และการเปรียบเทียบสถิติย้อนหลัง")
+    st.markdown("---")
 
-# แผนกที่ 1: ระบบทำความเย็น / ห้องเย็น
-with st.expander("📁 แผนกเพาะเชื้อและห้องเย็น (Cooling & Culture)", expanded=True):
-    col1, col2 = st.columns(2)
-    with col1:
-        c1_qty = st.number_input("จำนวนเครื่อง Chiller", value=2, key="c1_qty")
-        c1_kw = st.number_input("กำลังไฟฟ้า Chiller (kW)", value=45.0, key="c1_kw")
-        c1_peak = st.number_input("ชม. Peak / วัน (Chiller)", value=6.0, key="c1_peak")
-        c1_op = st.number_input("ชม. Off-Peak / วัน (Chiller)", value=12.0, key="c1_op")
-    with col2:
-        c2_qty = st.number_input("จำนวนเครื่อง Autoclave", value=3, key="c2_qty")
-        c2_kw = st.number_input("กำลังไฟฟ้า Autoclave (kW)", value=30.0, key="c2_kw")
-        c2_peak = st.number_input("ชม. Peak / วัน (Autoclave)", value=4.0, key="c2_peak")
-        c2_op = st.number_input("ชม. Off-Peak / วัน (Autoclave)", value=8.0, key="c2_op")
+    # คำนวณผลลัพธ์จากข้อมูลปัจจุบัน
+    sets = st.session_state['settings']
+    bill = st.session_state['bill_data']
+    depts = st.session_state['departments']
     
-    dept1_peak = ((c1_qty * c1_kw * c1_peak) + (c2_qty * c2_kw * c2_peak)) * days_per_month
-    dept1_op = ((c1_qty * c1_kw * c1_op) + (c2_qty * c2_kw * c2_op)) * days_per_month
-    dept1_total = dept1_peak + dept1_op
+    days = sets['days_per_month']
+    
+    # คำนวณสัดส่วนพลังงานแต่ละแผนกจากเครื่องจักร
+    dept_totals = {}
+    factory_theoretical_total = 0
+    
+    for dept_name, machines in depts.items():
+        dept_sum = 0
+        for m in machines:
+            m_kwh = m['qty'] * m['power_kw'] * (m['peak_hrs'] + m['op_hrs']) * days
+            dept_sum += m_kwh
+        dept_totals[dept_name] = dept_sum
+        factory_theoretical_total += dept_sum
 
-# แผนกที่ 2: บรรจุภัณฑ์
-with st.expander("📁 แผนกบรรจุภัณฑ์ (Packing Department)", expanded=True):
-    col1, col2 = st.columns(2)
-    with col1:
-        p1_qty = st.number_input("จำนวนเครื่อง Packing Line", value=1, key="p1_qty")
-        p1_kw = st.number_input("กำลังไฟฟ้า Packing (kW)", value=15.0, key="p1_kw")
-        p1_peak = st.number_input("ชม. Peak / วัน (Packing)", value=5.0, key="p1_peak")
-        p1_op = st.number_input("ชม. Off-Peak / วัน (Packing)", value=10.0, key="p1_op")
-    with col2:
-        p2_qty = st.number_input("จำนวนเครื่อง Conveyor", value=4, key="p2_qty")
-        p2_kw = st.number_input("กำลังไฟฟ้า Conveyor (kW)", value=3.5, key="p2_kw")
-        p2_peak = st.number_input("ชม. Peak / วัน (Conveyor)", value=6.0, key="p2_peak")
-        p2_op = st.number_input("ชม. Off-Peak / วัน (Conveyor)", value=12.0, key="p2_op")
+    # คำนวณค่าไฟฟ้าจากบิลจริง + โซล่าเซลล์
+    solar = bill['solar_kwh']
+    net_peak = max(0, bill['bill_peak_kwh'] - solar)
+    solar_remainder = max(0, solar - bill['bill_peak_kwh'])
+    net_op = max(0, bill['bill_op_kwh'] - solar_remainder)
+    net_total_kwh = net_peak + net_op
 
-    dept2_peak = ((p1_qty * p1_kw * p1_peak) + (p2_qty * p2_kw * p2_peak)) * days_per_month
-    dept2_op = ((p1_qty * p1_kw * p1_op) + (p2_qty * p2_kw * p2_op)) * days_per_month
-    dept2_total = dept2_peak + dept2_op
+    energy_cost = (net_peak * sets['peak_rate']) + (net_op * sets['op_rate'])
+    ft_cost = net_total_kwh * sets['ft_rate']
+    subtotal = energy_cost + ft_cost + sets['service_charge']
+    vat = subtotal * 0.07
+    grand_total = subtotal + vat
 
-# รวมทั้งโรงงาน
-factory_peak = dept1_peak + dept2_peak
-factory_op = dept1_op + dept2_op
-gross_total_kwh = factory_peak + factory_op
+    # 1. ส่วนแสดง KPI Cards เปรียบเทียบ
+    st.subheader("📈 สถิติและเปรียบเทียบค่าใช้จ่ายภาพรวม")
+    col1, col2, col3 = st.columns(3)
+    
+    diff_last = grand_total - sets['last_month_cost']
+    diff_avg = grand_total - sets['avg_historic_cost']
+    
+    col1.metric("💰 ค่าไฟฟ้าสุทธิเดือนนี้", f"{grand_total:,.2f} บาท", delta=f"{diff_last:+,.2f} บาท จากเดือนก่อน", delta_color="inverse")
+    col2.metric("📉 ค่าไฟเดือนที่แล้ว", f"{sets['last_month_cost']:,.2f} บาท")
+    col3.metric("📊 ค่าเฉลี่ยย้อนหลัง 6 เดือน", f"{sets['avg_historic_cost']:,.2f} บาท", delta=f"{diff_avg:+,.2f} บาท จากค่าเฉลี่ย", delta_color="inverse")
 
-# สัดส่วนแผนก (%)
-d1_share = (dept1_total / gross_total_kwh * 100) if gross_total_kwh > 0 else 0
-d2_share = (dept2_total / gross_total_kwh * 100) if gross_total_kwh > 0 else 0
+    st.markdown("---")
 
-# หักโซล่าเซลล์ (หัก Peak ก่อน เหลือไปหัก Off-Peak)
-net_peak = max(0, factory_peak - solar_kwh)
-solar_remainder = max(0, solar_kwh - factory_peak)
-net_op = max(0, factory_op - solar_remainder)
-net_total_kwh = net_peak + net_op
+    # 2. ส่วนแสดงข้อมูลพลังงานจากบิล & โซล่าเซลล์
+    c_left, c_right = st.columns(2)
+    with c_left:
+        st.subheader("⚡ รายละเอียดหน่วยไฟฟ้า (จากบิล & โซล่าเซลล์)")
+        st.write(f"- **หน่วยไฟฟ้าบิล (Peak):** {bill['bill_peak_kwh']:,.2f} kWh")
+        st.write(f"- **หน่วยไฟฟ้าบิล (Off-Peak):** {bill['bill_op_kwh']:,.2f} kWh")
+        st.write(f"- **พลังงานจากโซล่าเซลล์:** {bill['solar_kwh']:,.2f} kWh")
+        st.success(f"**รวมหน่วยไฟฟ้าสุทธิที่ต้องชำระ:** {net_total_kwh:,.2f} kWh")
 
-# คำนวณค่าใช้จ่าย
-cost_energy = (net_peak * peak_rate) + (net_op * op_rate)
-cost_ft = net_total_kwh * ft_rate
-subtotal = cost_energy + cost_ft + service_charge
-vat = subtotal * 0.07
-grand_total = subtotal + vat
+    with c_right:
+        st.subheader("💵 โครงสร้างค่าใช้จ่ายสุทธิ")
+        st.write(f"- ค่าพลังงานไฟฟ้า (Peak/Off-Peak): {energy_cost:,.2f} บาท")
+        st.write(f"- ค่า Ft รวม: {ft_cost:,.2f} บาท")
+        st.write(f"- ค่าบริการรายเดือน: {sets['service_charge']:,.2f} บาท")
+        st.write(f"- ภาษีมูลค่าเพิ่ม (VAT 7%): {vat:,.2f} บาท")
 
-# --- ส่วนแสดงผล Dashboard ---
-st.markdown("---")
-st.subheader("📊 ผลการสรุปและเปรียบเทียบสถิติสำคัญ")
+    st.markdown("---")
 
-m1, m2, m3 = st.columns(3)
-diff_last = grand_total - last_month_cost
-diff_avg = grand_total - avg_historic_cost
+    # 3. ส่วนแสดงสัดส่วนและการจัดสรรต้นทุนรายแผนก
+    st.subheader("🏭 สัดส่วนการใช้ไฟฟ้าและการจัดสรรต้นทุนแยกตามแผนก")
+    
+    if factory_theoretical_total > 0:
+        for dept_name, dept_kwh in dept_totals.items():
+            share = (dept_kwh / factory_theoretical_total) * 100
+            allocated_cost = grand_total * (share / 100)
+            
+            with st.container():
+                st.markdown(f"#### 📁 {dept_name}")
+                col_a, col_b, col_c = st.columns([2, 2, 2])
+                col_a.write(f"พลังงานรวม: **{dept_kwh:,.2f} kWh**")
+                col_b.write(f"สัดส่วนการใช้ไฟ: **{share:.2f}%** ของโรงงาน")
+                col_c.write(f"ต้นทุนค่าไฟประเมิน: **{allocated_cost:,.2f} บาท**")
+                st.progress(share / 100)
+                st.markdown("")
+    else:
+        st.warning("⚠️ กรุณากรอกข้อมูลกำลังไฟฟ้าและชั่วโมงทำงานของเครื่องจักรใน 'หน้าลงข้อมูลจริง'")
 
-m1.metric("💰 ค่าไฟฟ้าสุทธิเดือนนี้", f"{grand_total:,.2f} บาท", delta=f"{diff_last:+,.2f} บาท จากเดือนก่อน", delta_color="inverse")
-m2.metric("📉 เทียบกับเดือนที่แล้ว", f"{last_month_cost:,.2f} บาท")
-m3.metric("📊 เทียบค่าเฉลี่ยย้อนหลัง", f"{avg_historic_cost:,.2f} บาท", delta=f"{diff_avg:+,.2f} บาท จากค่าเฉลี่ย", delta_color="inverse")
 
-st.markdown("---")
-col_res1, col_res2 = st.columns(2)
+# ==========================================
+# หน้าที่ 2: หน้าลงข้อมูลจริง
+# ==========================================
+elif menu == "📝 หน้าลงข้อมูลจริง":
+    st.title("📝 บันทึกข้อมูลบิลค่าไฟและเครื่องจักรรายแผนก")
+    st.markdown("กรอกหน่วยไฟฟ้าจากบิลการไฟฟ้า ผลผลิตโซล่าเซลล์ และรายละเอียดการทำงานของเครื่องจักร")
+    st.markdown("---")
 
-with col_res1:
-    st.markdown("### ⚡ สรุปหน่วยไฟฟ้า (kWh)")
-    st.write(f"- หน่วยไฟฟ้าเดิมก่อนหักโซล่าเซลล์: **{gross_total_kwh:,.2f} kWh**")
-    st.write(f"- ผลผลิตจากโซล่าเซลล์: **{solar_kwh:,.2f} kWh**")
-    st.write(f"- หน่วยไฟฟ้าสุทธิที่ต้องชำระ (Peak): **{net_peak:,.2f} kWh**")
-    st.write(f"- หน่วยไฟฟ้าสุทธิที่ต้องชำระ (Off-Peak): **{net_op:,.2f} kWh**")
-    st.write(f"- **รวมหน่วยไฟฟ้าสุทธิ:** **{net_total_kwh:,.2f} kWh**")
+    # 1. ข้อมูลบิลค่าไฟและโซล่าเซลล์
+    st.subheader("📄 1. ข้อมูลจากบิลค่าไฟฟ้าและโซล่าเซลล์ประจำเดือน")
+    b_col1, b_col2, b_col3 = st.columns(3)
+    
+    with b_col1:
+        st.session_state['bill_data']['bill_peak_kwh'] = st.number_input(
+            "หน่วยไฟฟ้าบิล ช่วง Peak (kWh)", value=st.session_state['bill_data']['bill_peak_kwh'], step=100.0
+        )
+    with b_col2:
+        st.session_state['bill_data']['bill_op_kwh'] = st.number_input(
+            "หน่วยไฟฟ้าบิล ช่วง Off-Peak (kWh)", value=st.session_state['bill_data']['bill_op_kwh'], step=100.0
+        )
+    with b_col3:
+        st.session_state['bill_data']['solar_kwh'] = st.number_input(
+            "พลังงานโซล่าเซลล์ที่ผลิตได้ทั้งหมด (kWh)", value=st.session_state['bill_data']['solar_kwh'], step=100.0
+        )
 
-with col_res2:
-    st.markdown("### 🥧 สัดส่วนการใช้พลังงานรายแผนก")
-    st.write(f"- **แผนกเพาะเชื้อและห้องเย็น:** {dept1_total:,.2f} kWh (**{d1_share:.2f}%**)")
-    st.write(f"- **แผนกบรรจุภัณฑ์:** {dept2_total:,.2f} kWh (**{d2_share:.2f}%**)")
-    st.progress(d1_share / 100, text=f"สัดส่วนห้องเย็น {d1_share:.1f}% / บรรจุภัณฑ์ {d2_share:.1f}%")
+    st.markdown("---")
+
+    # 2. ข้อมูลเครื่องจักรแยกตามแผนก
+    st.subheader("⚙️ 2. ข้อมูลชั่วโมงการทำงานและกำลังไฟฟ้าของเครื่องจักรแยกตามแผนก")
+    st.session_state['settings']['days_per_month'] = st.slider(
+        "จำนวนวันทำงานเฉลี่ยต่อเดือน", min_value=1, max_value=31, value=st.session_state['settings']['days_per_month']
+    )
+
+    depts = st.session_state['departments']
+    
+    for dept_name, machines in depts.items():
+        with st.expander(f"📁 แผนก: {dept_name}", expanded=True):
+            for i, m in enumerate(machines):
+                st.markdown(f"**เครื่องที่ {i+1}: {m['name']}**")
+                mc1, mc2, mc3, mc4, mc5 = st.columns(5)
+                
+                with mc1:
+                    m['qty'] = st.number_input(f"จำนวนเครื่อง ({m['name']})", value=int(m['qty']), min_value=1, key=f"{dept_name}_{i}_qty")
+                with mc2:
+                    m['power_kw'] = st.number_input(f"กำลังไฟ/เครื่อง (kW)", value=float(m['power_kw']), key=f"{dept_name}_{i}_kw")
+                with mc3:
+                    m['peak_hrs'] = st.number_input(f"ชม. Peak/วัน", value=float(m['peak_hrs']), key=f"{dept_name}_{i}_peak")
+                with mc4:
+                    m['op_hrs'] = st.number_input(f"ชม. Off-Peak/วัน", value=float(m['op_hrs']), key=f"{dept_name}_{i}_op")
+                with mc5:
+                    calc_total = m['qty'] * m['power_kw'] * (m['peak_hrs'] + m['op_hrs']) * st.session_state['settings']['days_per_month']
+                    st.metric("รวมพลังงาน (kWh/เดือน)", f"{calc_total:,.1f}")
+                st.markdown("---")
+
+    st.success("✅ ข้อมูลทั้งหมดถูกบันทึกอัตโนมัติ สามารถกดไปที่เมนู 'หน้าสรุป (Dashboard)' เพื่อดูรายงานได้ทันทีครับ")
+
+
+# ==========================================
+# หน้าที่ 3: หน้า Setting (ตั้งค่า)
+# ==========================================
+elif menu == "⚙️ หน้า Setting (ตั้งค่า)":
+    st.title("⚙️ ตั้งค่าระบบ เรทราคาค่าไฟฟ้า และจัดการแผนก")
+    st.markdown("กำหนดอัตราค่าไฟฟ้าตามประเภทผู้ใช้ไฟ ค่า Ft ค่าบริการ และจัดการโครงสร้างแผนกในโรงงาน")
+    st.markdown("---")
+
+    sets = st.session_state['settings']
+
+    st.subheader("💰 กำหนดเรทราคาค่าไฟฟ้าและค่าบริการ")
+    s_col1, s_col2 = st.columns(2)
+    
+    with s_col1:
+        sets['peak_rate'] = st.number_input("เรทค่าไฟ Peak (บาท/หน่วย)", value=float(sets['peak_rate']), format="%.4f")
+        sets['op_rate'] = st.number_input("เรทค่าไฟ Off-Peak (บาท/หน่วย)", value=float(sets['op_rate']), format="%.4f")
+        sets['ft_rate'] = st.number_input("ค่า Ft (บาท/หน่วย)", value=float(sets['ft_rate']), format="%.4f")
+    
+    with s_col2:
+        sets['service_charge'] = st.number_input("ค่าบริการรายเดือน (บาท)", value=float(sets['service_charge']))
+        sets['last_month_cost'] = st.number_input("ยอดค่าไฟเดือนที่แล้วสำหรับเปรียบเทียบ (บาท)", value=float(sets['last_month_cost']))
+        sets['avg_historic_cost'] = st.number_input("ค่าเฉลี่ยค่าไฟย้อนหลัง 6 เดือน (บาท)", value=float(sets['avg_historic_cost']))
+
+    st.markdown("---")
+    st.subheader("🏢 จัดการแผนกในโรงงาน")
+    
+    # เพิ่มแผนกใหม่
+    new_dept_name = st.text_input("ชื่อแผนกใหม่ที่ต้องการเพิ่ม:")
+    if st.button("➕ เพิ่มแผนกใหม่"):
+        if new_dept_name and new_dept_name not in st.session_state['departments']:
+            st.session_state['departments'][new_dept_name] = [
+                {"name": "เครื่องจักรหลัก", "qty": 1, "power_kw": 10.0, "peak_hrs": 5.0, "op_hrs": 10.0}
+            ]
+            st.success(f"เพิ่มแผนก '{new_dept_name}' สำเร็จ!")
+            st.rerun()
+        elif new_dept_name in st.session_state['departments']:
+            st.warning("ชื่อแผนกนี้มีอยู่แล้วในระบบ")
+
+    st.write("---")
+    st.markdown("### แผนกที่มีอยู่ปัจจุบัน:")
+    depts = st.session_state['departments']
+    
+    for d_name in list(depts.keys()):
+        col_d1, col_d2 = st.columns([3, 1])
+        col_d1.markdown(f"- **{d_name}** (มี {len(depts[d_name])} รายการเครื่องจักร)")
+        if col_d2.button(f"🗑️ ลบแผนก", key=f"del_{d_name}"):
+            if len(depts) > 1:
+                del st.session_state['departments'][d_name]
+                st.success(f"ลบแผนก {d_name} เรียบร้อยแล้ว")
+                st.rerun()
+            else:
+                st.error("ต้องมีแผนกอย่างน้อย 1 แผนกในระบบ")
+
+    st.success("✅ บันทึกการตั้งค่าทั้งหมดเรียบร้อยแล้ว")
