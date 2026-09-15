@@ -27,7 +27,7 @@ st.set_page_config(
 # GLOBAL CONSTANTS
 # =====================================================================================
 COLOR_PALETTE = ["#2E86AB", "#06A77D", "#F1A208", "#D64550", "#5C4B99", "#1B998B",
-                  "#E07A5F", "#3D5A80", "#8AB17D", "#B56576"]
+                 "#E07A5F", "#3D5A80", "#8AB17D", "#B56576"]
 
 MACHINE_COLUMNS = ["Machine Name", "Quantity", "kW", "Peak Hours/day", "Off-Peak Hours/day"]
 
@@ -103,7 +103,7 @@ def inject_css():
             font-size: 0.85rem;
             font-weight: 600;
         }
-        .kpi-up { color: #D64550; }     /* cost increased -> bad -> red */
+        .kpi-up { color: #D64550; }   /* cost increased -> bad -> red */
         .kpi-down { color: #06A77D; }   /* cost decreased -> good -> green */
         .kpi-flat { color: #6B7A99; }
 
@@ -135,7 +135,6 @@ def inject_css():
 # SESSION STATE INITIALIZATION
 # =====================================================================================
 def init_session_state():
-    # --- Rate configuration & historical data (flat keys => auto persisted by widgets) ---
     defaults = {
         "peak_rate": 4.50,
         "offpeak_rate": 2.80,
@@ -152,7 +151,6 @@ def init_session_state():
         if k not in st.session_state:
             st.session_state[k] = v
 
-    # --- Departments & machines (dict of DataFrames) ---
     if "departments" not in st.session_state:
         st.session_state.departments = {
             "Cooling System": pd.DataFrame([
@@ -189,7 +187,6 @@ def init_session_state():
 # CALCULATION ENGINE
 # =====================================================================================
 def compute_department_theoretical_kwh(departments: dict, billing_days: int) -> pd.DataFrame:
-    """Compute theoretical Peak / Off-Peak / Total kWh per department."""
     rows = []
     for dept, df in departments.items():
         if df is None or df.empty:
@@ -208,7 +205,6 @@ def compute_department_theoretical_kwh(departments: dict, billing_days: int) -> 
 
 
 def compute_net_bill(actual_peak, actual_offpeak, solar):
-    """Deduct solar generation from Peak first, remainder from Off-Peak."""
     net_peak = max(actual_peak - solar, 0.0)
     remaining_solar = max(solar - actual_peak, 0.0)
     net_offpeak = max(actual_offpeak - remaining_solar, 0.0)
@@ -236,20 +232,17 @@ def compute_total_cost(net_peak, net_offpeak, peak_rate, offpeak_rate, ft_rate, 
 
 
 def allocate_cost(dept_theoretical: pd.DataFrame, grand_total: float) -> pd.DataFrame:
-    """Allocate the grand total bill to departments by % share of theoretical kWh."""
     df = dept_theoretical.copy()
     total_theoretical = df["Total kWh"].sum()
     if total_theoretical > 0:
         df["Share %"] = df["Total kWh"] / total_theoretical * 100
     else:
-        # Fallback: split evenly if no machine data entered yet
         df["Share %"] = 100 / len(df) if len(df) > 0 else 0
     df["Allocated Cost (THB)"] = df["Share %"] / 100 * grand_total
     return df
 
 
 def run_full_calculation():
-    """Central calculation pipeline used by the Dashboard page."""
     billing_days = int(st.session_state.billing_days)
     dept_theo = compute_department_theoretical_kwh(st.session_state.departments, billing_days)
 
@@ -290,12 +283,10 @@ def fmt_kwh(value):
 
 
 def kpi_card(title, value_str, delta_val, delta_pct, invert_good=True, primary=False):
-    """Render a single premium KPI card comparing current value to a reference."""
     if delta_val is None:
         sub_html = f'<div class="kpi-sub kpi-flat">— no comparison data —</div>'
     else:
         is_increase = delta_val > 0
-        # For cost metrics, an increase is BAD (red), decrease is GOOD (green)
         css_class = "kpi-up" if is_increase else ("kpi-down" if delta_val < 0 else "kpi-flat")
         arrow = "▲" if is_increase else ("▼" if delta_val < 0 else "■")
         sub_html = (f'<div class="kpi-sub {css_class}">{arrow} {fmt_thb(abs(delta_val))} '
@@ -343,7 +334,6 @@ def page_dashboard():
     delta_vs_avg = grand_total - six_avg if six_avg else None
     pct_vs_avg = (delta_vs_avg / six_avg * 100) if six_avg else 0
 
-    # ------------------- Row 1: Primary KPI Cards -------------------
     c1, c2, c3 = st.columns(3)
     with c1:
         kpi_card("Total Net Cost (This Month)", fmt_thb(grand_total), None, None, primary=True)
@@ -354,7 +344,6 @@ def page_dashboard():
 
     st.write("")
 
-    # ------------------- Row 2: Secondary Chip Metrics -------------------
     s1, s2, s3, s4 = st.columns(4)
     with s1:
         chip_metric("Net Peak kWh (billed)", fmt_kwh(results["net_peak"]))
@@ -368,7 +357,6 @@ def page_dashboard():
     st.write("")
     st.write("")
 
-    # ------------------- Row 3: Donut Chart + Peak/Off-Peak Bar -------------------
     col_left, col_right = st.columns([1, 1.2])
 
     with col_left:
@@ -388,7 +376,7 @@ def page_dashboard():
                 showlegend=True,
                 legend=dict(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.02, font=dict(size=11)),
                 annotations=[dict(text=f"{dept_theo['Total kWh'].sum():,.0f}<br>kWh Total",
-                                   x=0.5, y=0.5, font_size=15, showarrow=False, font=dict(color="#14213D"))],
+                                  x=0.5, y=0.5, font_size=15, showarrow=False, font=dict(color="#14213D"))],
                 margin=dict(t=10, b=10, l=10, r=10),
                 height=380,
             )
@@ -423,7 +411,6 @@ def page_dashboard():
 
     st.write("")
 
-    # ------------------- Row 4: Cost Allocation -------------------
     st.markdown('<div class="section-title">💰 Total Bill Cost Allocation by Department</div>',
                 unsafe_allow_html=True)
     st.caption("The actual factory bill is distributed proportionally to each department's "
@@ -465,7 +452,6 @@ def page_dashboard():
             height=340,
         )
 
-    # ------------------- Row 5: Bill Breakdown -------------------
     with st.expander("🧾 View Full Bill Breakdown"):
         b1, b2, b3, b4, b5 = st.columns(5)
         b1.metric("Energy Cost", fmt_thb(cost["energy_cost"]))
@@ -483,19 +469,18 @@ def page_data_entry():
     st.caption("Enter the actual utility bill readings and department machine operating hours.")
     st.markdown("<hr/>", unsafe_allow_html=True)
 
-    # ------------------- Section A: Actual Bill & Solar -------------------
     st.markdown('<div class="section-title">Section A — Actual Bill & Solar Generation</div>',
                 unsafe_allow_html=True)
     a1, a2, a3 = st.columns(3)
     with a1:
         st.number_input("Actual Peak kWh (from utility bill)", min_value=0.0, step=100.0,
-                         format="%.2f", key="actual_peak_kwh")
+                        format="%.2f", key="actual_peak_kwh")
     with a2:
         st.number_input("Actual Off-Peak kWh (from utility bill)", min_value=0.0, step=100.0,
-                         format="%.2f", key="actual_offpeak_kwh")
+                        format="%.2f", key="actual_offpeak_kwh")
     with a3:
         st.number_input("Total Solar Generation (kWh)", min_value=0.0, step=100.0,
-                         format="%.2f", key="solar_kwh")
+                        format="%.2f", key="solar_kwh")
 
     st.info("💡 Solar generation is deducted from Peak kWh first; any remaining solar credit "
             "offsets Off-Peak kWh.", icon="☀️")
@@ -503,7 +488,6 @@ def page_data_entry():
     st.write("")
     st.write("")
 
-    # ------------------- Section B: Machine Working Hours -------------------
     st.markdown('<div class="section-title">Section B — Machine Working Hours by Department</div>',
                 unsafe_allow_html=True)
     st.caption("Edit rows directly in each table. Use the ➕ button (last row) to add a machine, "
@@ -515,7 +499,7 @@ def page_data_entry():
         if not df.empty:
             d = df.fillna(0)
             theoretical_kwh = ((d["Quantity"] * d["kW"] * d["Peak Hours/day"]) +
-                                (d["Quantity"] * d["kW"] * d["Off-Peak Hours/day"])).sum() * st.session_state.billing_days
+                               (d["Quantity"] * d["kW"] * d["Off-Peak Hours/day"])).sum() * st.session_state.billing_days
 
         with st.expander(f"🏭 {dept}  —  {theoretical_kwh:,.0f} kWh / month (theoretical)", expanded=False):
             edited_df = st.data_editor(
@@ -528,9 +512,9 @@ def page_data_entry():
                     "Quantity": st.column_config.NumberColumn("Quantity", min_value=0, step=1, format="%d"),
                     "kW": st.column_config.NumberColumn("kW (per unit)", min_value=0.0, step=0.1, format="%.2f"),
                     "Peak Hours/day": st.column_config.NumberColumn("Peak Hours/day", min_value=0.0,
-                                                                      max_value=24.0, step=0.5, format="%.1f"),
+                                                                    max_value=24.0, step=0.5, format="%.1f"),
                     "Off-Peak Hours/day": st.column_config.NumberColumn("Off-Peak Hours/day", min_value=0.0,
-                                                                         max_value=24.0, step=0.5, format="%.1f"),
+                                                                        max_value=24.0, step=0.5, format="%.1f"),
                 },
             )
             st.session_state.departments[dept] = edited_df
@@ -544,7 +528,6 @@ def page_settings():
     st.caption("Configure electricity rates, historical benchmarks, and factory departments.")
     st.markdown("<hr/>", unsafe_allow_html=True)
 
-    # ------------------- Rate Configurations -------------------
     st.markdown('<div class="section-title">Rate Configurations</div>', unsafe_allow_html=True)
     r1, r2, r3, r4 = st.columns(4)
     with r1:
@@ -555,26 +538,24 @@ def page_settings():
         st.number_input("Ft Rate (THB/kWh)", min_value=-5.0, step=0.001, format="%.4f", key="ft_rate")
     with r4:
         st.number_input("Monthly Service Charge (THB)", min_value=0.0, step=1.0, format="%.2f",
-                         key="service_charge")
+                        key="service_charge")
 
     st.number_input("Billing Days in Month", min_value=1, max_value=31, step=1, key="billing_days",
-                     help="Used to convert daily machine hours into monthly theoretical kWh.")
+                    help="Used to convert daily machine hours into monthly theoretical kWh.")
 
     st.write("")
 
-    # ------------------- Historical Data -------------------
     st.markdown('<div class="section-title">Historical Data</div>', unsafe_allow_html=True)
     h1, h2 = st.columns(2)
     with h1:
         st.number_input("Last Month's Bill (THB)", min_value=0.0, step=1000.0, format="%.2f",
-                         key="last_month_cost")
+                        key="last_month_cost")
     with h2:
         st.number_input("6-Month Average Bill (THB)", min_value=0.0, step=1000.0, format="%.2f",
-                         key="six_month_avg")
+                        key="six_month_avg")
 
     st.write("")
 
-    # ------------------- Department Management -------------------
     st.markdown('<div class="section-title">Department Management</div>', unsafe_allow_html=True)
 
     dcol1, dcol2 = st.columns(2)
@@ -582,7 +563,7 @@ def page_settings():
     with dcol1:
         st.markdown("**➕ Add New Department**")
         new_dept_name = st.text_input("New Department Name", key="new_dept_input",
-                                       placeholder="e.g. Cold Storage Warehouse")
+                                      placeholder="e.g. Cold Storage Warehouse")
         if st.button("Add Department", type="primary", use_container_width=True):
             name = new_dept_name.strip()
             if not name:
@@ -598,8 +579,8 @@ def page_settings():
         st.markdown("**🗑️ Delete Department**")
         if st.session_state.departments:
             dept_to_delete = st.selectbox("Select Department to Delete",
-                                           options=list(st.session_state.departments.keys()),
-                                           key="delete_dept_select")
+                                         options=list(st.session_state.departments.keys()),
+                                         key="delete_dept_select")
             if st.button("Delete Department", type="secondary", use_container_width=True):
                 del st.session_state.departments[dept_to_delete]
                 st.success(f"Department '{dept_to_delete}' deleted.")
